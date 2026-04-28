@@ -1,4 +1,4 @@
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict, Any
 
 Time = int  # minutes since midnight
 Interval = Tuple[Time, Time]
@@ -39,31 +39,56 @@ def recommend_slots(
     buffer: int = 0,
     candidate_window: Optional[Interval] = None,
     max_results: int = 5,
-) -> List[Interval]:
+    include_explanations: bool = False,  # NEW
+) -> Dict[str, Any]:
     """
-    Returns next N valid appointment slots in chronological order.
+    Returns:
+    {
+        "slots": List[Interval],
+        "meta": {
+            "reason": str (only if needed),
+            "steps": List[str] (optional, if explanations enabled)
+        }
+    }
     """
+
+    meta: Dict[str, Any] = {}
+    steps: List[str] = []
 
     work_start, work_end = working_hours
 
     # Step 1: normalize busy intervals
     busy = _merge_intervals(busy_intervals)
+    if include_explanations:
+        steps.append(f"Merged busy intervals → {busy}")
 
     # Step 2: apply buffer
     busy = _apply_buffer(busy, buffer)
+    if include_explanations:
+        steps.append(f"Applied buffer ({buffer} mins) → {busy}")
 
-    # Step 3: merge again after buffer expansion
+    # Step 3: merge again
     busy = _merge_intervals(busy)
+    if include_explanations:
+        steps.append(f"Re-merged intervals → {busy}")
 
     # Step 4: determine search window
     search_start, search_end = work_start, work_end
+
     if candidate_window:
         clamped = _clamp(candidate_window, working_hours)
-        if not clamped:
-            return []
-        search_start, search_end = clamped
 
-    results = []
+        if not clamped:
+            meta["reason"] = "Candidate window outside working hours."
+            if include_explanations:
+                meta["steps"] = steps
+            return {"slots": [], "meta": meta}
+
+        search_start, search_end = clamped
+        if include_explanations:
+            steps.append(f"Clamped search window → {clamped}")
+
+    results: List[Interval] = []
     current = search_start
 
     for start, end in busy:
@@ -76,18 +101,35 @@ def recommend_slots(
         gap_end = min(start, search_end)
 
         if gap_end - gap_start >= duration:
-            results.append((gap_start, gap_start + duration))
+            slot = (gap_start, gap_start + duration)
+            results.append(slot)
+
+            if include_explanations:
+                steps.append(f"Selected slot {slot} from gap ({gap_start}, {gap_end})")
+
             if len(results) >= max_results:
-                return results
+                break
 
         current = max(current, end)
 
     # final gap
-    if current < search_end:
+    if len(results) < max_results and current < search_end:
         if search_end - current >= duration:
-            results.append((current, current + duration))
+            slot = (current, current + duration)
+            results.append(slot)
 
-    return results[:max_results]
+            if include_explanations:
+                steps.append(f"Selected final slot {slot}")
+
+    # Handle empty results explicitly (NO silent failure)
+    if not results:
+        meta["reason"] = "No available slots meet duration and buffer constraints."
+
+    if include_explanations:
+        meta["steps"] = steps
+
+    return {"slots": results[:max_results], "meta": meta}
+
 
 # REQUIRED NAME (adapter)
 def is_allocation_feasible(
@@ -97,6 +139,7 @@ def is_allocation_feasible(
     buffer=0,
     candidate_window=None,
     max_results=5,
+    include_explanations=False,
 ):
     return recommend_slots(
         working_hours,
@@ -105,4 +148,5 @@ def is_allocation_feasible(
         buffer,
         candidate_window,
         max_results,
+        include_explanations,
     )
