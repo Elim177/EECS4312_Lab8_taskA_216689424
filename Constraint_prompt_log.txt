@@ -4,3 +4,15 @@
 Prompt #1: {}
 Response #1: {}
 --------------------------------------------------
+NO LLM WAS USED
+
+Constraints from Persona 1
+1. The system must allow automation with the only manual input being time slots and location.
+2. The system must allow automatic resolutions of timeslot conflicts.
+3. If the system is given the same set of inputs it should behave similarly in all the outcome scenarios.
+4. The system shall present the output time slots in a clear manner and 
+5. The system shall not send duplicate messages/notifications for the one situation
+Constraints from Persona 2
+1. The system should be able to  offer notes to the user when time slots are moved because of scheduling conflicts.
+2. The system shall provide brief explanations for decisions made when scheduling meetings in the event of successful outcomes
+3. The system shall verify the correctness of the output for the time slots recommended by the system.
